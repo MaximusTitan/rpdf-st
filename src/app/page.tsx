@@ -1,101 +1,165 @@
-import Image from "next/image";
+'use client'
+
+import { ScrollArea } from '../components/ui/scroll-area'
+import { useChat, Message } from 'ai/react'
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabaseClient'
+import Image from "next/image"
+import { useRouter } from 'next/navigation'
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { User } from '@supabase/auth-js'
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const router = useRouter()
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('Error fetching session:', error.message)
+        setLoading(false)
+      } else {
+        if (session?.user) {
+          setUser(session.user)
+        } else {
+          router.push('/auth') // Redirect to /auth if not authenticated
+        }
+        setLoading(false)
+      }
+    }
+    getUser()
+  }, [router])
+
+
+  // Let's only add user message in db from here
+  const insertMessage = async (message: string, userType: 'user' | 'AI') => {
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('chat_history')
+      .insert({
+        user_id: user.id,
+        message: message,
+        user_type: userType,
+      })
+
+    if (error) {
+      console.error('Error inserting message:', error)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!user || !input.trim()) return
+
+    // Insert user message
+    await insertMessage(input, 'user')
+
+    // Call AI submit function
+    await aiSubmit(e)
+
+    // Get the AI response (last message)
+    const aiMessage = messages[messages.length - 1]
+    if (aiMessage && aiMessage.role === 'assistant') {
+      // Insert AI response
+      await insertMessage(aiMessage.content, 'AI')
+    }
+  }
+
+  const { messages, input, handleInputChange, handleSubmit: aiSubmit, isLoading, setMessages } = useChat({
+    // Remove sendExtraMessage if it's not a valid option
+  })
+
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      console.error('Error logging out:', error.message)
+    } else {
+      setUser(null)
+      router.push('/auth') // Redirect to /auth after logout
+    }
+  }
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="border-b">
+        <div className="container flex items-center justify-between h-16">
+          <Image
+            className="dark:invert"
+            src="/next.svg"
+            alt="Next.js logo"
+            width={100}
+            height={20}
+            priority
+          />
+          <div className="flex gap-4">
+            {user && (
+              <>
+                <span className="text-sm font-medium">{user.email}</span>
+                <Button
+                  variant="ghost"
+                  onClick={handleLogout}
+                >
+                  Sign Out
+                </Button>
+              </>
+            )}
+          </div>
         </div>
+      </header>
+
+      <main className="container py-6">
+        <Card className="max-w-2xl mx-auto">
+          <CardHeader>
+            <CardTitle>Chat with AI</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[500px] pr-4">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`mb-4 flex ${
+                    message.role === 'user' ? 'justify-end' : 'justify-start'
+                  }`}
+                >
+                  <div
+                    className={`rounded-lg px-4 py-2 max-w-[80%] ${
+                      message.role === 'user'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted'
+                    }`}
+                  >
+                    {message.content}
+                  </div>
+                </div>
+              ))}
+            </ScrollArea>
+          </CardContent>
+          <CardFooter>
+            <form onSubmit={handleSubmit} className="flex w-full gap-2">
+              <Input
+                value={input}
+                onChange={handleInputChange}
+                placeholder="Type your message..."
+                disabled={isLoading}
+              />
+              <Button type="submit" disabled={isLoading}>
+                Send
+              </Button>
+            </form>
+          </CardFooter>
+        </Card>
       </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
-  );
+  )
 }
+

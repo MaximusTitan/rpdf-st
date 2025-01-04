@@ -1,7 +1,7 @@
 'use client'
 
 import { ScrollArea } from '../components/ui/scroll-area'
-import { useChat, Message } from 'ai/react'
+import { useChat } from 'ai/react'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import Image from "next/image"
@@ -70,7 +70,7 @@ export default function Home() {
     }
   }
 
-  const { messages, input, handleInputChange, handleSubmit: aiSubmit, isLoading, setMessages } = useChat({
+  const { messages, input, handleInputChange, handleSubmit: aiSubmit, isLoading } = useChat({
     // Remove sendExtraMessage if it's not a valid option
   })
 
